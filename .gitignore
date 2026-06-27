@@ -24,5 +24,9 @@ ref/
 *.vcf.gz
 *.vcf.gz.tbi
 
+# Nextflow
+.nextflow/
+.nextflow.log*
+
 # OS
 .DS_Store
