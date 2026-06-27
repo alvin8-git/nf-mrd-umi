@@ -17,9 +17,12 @@ process PANEL_SELECT {
 
     script:
     """
+    # PyClone-vi results -> per-variant ccf/clonal_prob panel_select expects
+    pyclone_prep.py to-ccf --pyclone ${ccf_tsv} --out ccf.tsv
+
     panel_select.py run \\
         --vcf ${annotated_vcf} \\
-        --ccf ${ccf_tsv} \\
+        --ccf ccf.tsv \\
         --normal-evidence ${normal_evidence} \\
         --chip-blocklist ${chip_blocklist} \\
         --panel-size ${params.panel_size} --min-ccf ${params.min_ccf} \\

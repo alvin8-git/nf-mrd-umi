@@ -1,9 +1,7 @@
 // Pipeline A glue: build the PyClone-vi input table from the somatic VCF +
 // FACETS copy number + tumour purity, and map PyClone's output back to the
-// per-variant (ccf, clonal_prob) TSV that panel_select.py expects.
-//
-// TODO: bin/pyclone_prep.py is NOT written yet (the remaining Pipeline A gap,
-// like build_background.py was for Pipeline B). The stub keeps the DAG valid.
+// per-variant (ccf, clonal_prob) TSV that panel_select.py expects. The `to-ccf`
+// half runs inside PANEL_SELECT (both scripts live in the utils image).
 process PYCLONE_PREP {
     tag "${meta.id}"
     label 'process_low'
@@ -21,7 +19,7 @@ process PYCLONE_PREP {
     pyclone_prep.py build \\
         --vcf ${somatic_vcf} --facets ${facets_vcf} --purity ${purity} \\
         --out ${meta.id}.pyclone_input.tsv
-    echo '"${task.process}": {pyclone_prep: TODO}' > versions.yml
+    echo '"${task.process}": {pyclone_prep: bin}' > versions.yml
     """
 
     stub:

@@ -1,9 +1,7 @@
 // Pipeline A glue: pile up the matched buffy-coat BAM at the somatic sites to
 // get per-site (normal_alt, normal_depth). panel_select.py uses this to subtract
 // CHIP / germline (design P4 — CHIP is defined by presence in the WBC compartment).
-//
-// TODO: bin/normal_evidence.py is NOT written yet. The stub keeps the DAG valid.
-// Real impl: bcftools mpileup -R <sites> the buffy BAM, emit the per-site table.
+// Pileups the buffy BAM at the somatic sites -> per-site (normal_alt, normal_depth).
 process NORMAL_EVIDENCE {
     tag "${meta.id}"
     label 'process_low'
@@ -22,7 +20,7 @@ process NORMAL_EVIDENCE {
     normal_evidence.py pileup \\
         --vcf ${somatic_vcf} --bam ${buffy_bam} --ref ${fasta} \\
         --out ${meta.id}.normal_evidence.tsv
-    echo '"${task.process}": {normal_evidence: TODO}' > versions.yml
+    echo '"${task.process}": {normal_evidence: bin}' > versions.yml
     """
 
     stub:
