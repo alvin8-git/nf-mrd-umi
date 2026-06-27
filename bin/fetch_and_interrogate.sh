@@ -81,9 +81,22 @@ process_one() {
   if [[ -s $out ]]; then echo "[$srr] skip (output exists)"; return 0; fi
   local wd="$WORKDIR/$srr"; mkdir -p "$wd"
   local rg="@RG\tID:${srr}\tSM:${srr}\tLB:${srr}\tPL:ILLUMINA"
-  echo "[$srr] download"
-  prefetch -O "$wd" "$srr" >/dev/null
-  fasterq-dump --split-files --threads "$THREADS" -O "$wd" "$srr" >/dev/null
+  echo "[$srr] download (prefetch -> local .sra)"
+  prefetch -O "$wd" --max-size 100G "$srr" >/dev/null
+  # Verify a LOCAL .sra exists. Without this, fasterq-dump silently falls back to
+  # streaming from NCBI (~MB/s, stalls) instead of extracting the local file fast.
+  local sra
+  sra=$(find "$wd" -name "${srr}.sra" -o -name "${srr}.sralite" 2>/dev/null | head -1)
+  if [[ ! -s $sra ]]; then
+    echo "[$srr] ERROR: prefetch produced no local .sra (would stream remotely)" >&2
+    return 1
+  fi
+  echo "[$srr] extract local .sra ($(du -h "$sra" | cut -f1)) -> fastq"
+  mkdir -p "$wd/fqtmp"
+  # explicit .sra PATH (not the bare accession) forces local extraction; -t keeps
+  # scratch inside the run dir (no repo-root pollution).
+  fasterq-dump --split-files --threads "$THREADS" -O "$wd" -t "$wd/fqtmp" "$sra" >/dev/null
+  rm -rf "$wd/fqtmp"
 
   # locate fastqs (paired or single)
   local fq1="$wd/${srr}_1.fastq" fq2="$wd/${srr}_2.fastq" fqs
