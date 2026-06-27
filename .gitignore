@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Agent / local tool state (not project source)
+.omc/
+.claude/
+*.local.json
+
+# Pipeline outputs and large data (regenerated; never source-controlled)
+work/
+results/
+ref/
+*.bam
+*.bai
+*.cram
+*.fastq
+*.fastq.gz
+*.fq.gz
+*.sra
+*.vcf.gz
+*.vcf.gz.tbi
+
+# OS
+.DS_Store
