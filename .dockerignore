@@ -1,0 +1,30 @@
+# Keep the Docker build context tiny -> Dockerfile.utils only COPYs bin/, so
+# never ship sequencing data, references, run dirs, or git history into the
+# build. This is the direct anti-balloon lever (a fat context bloats the image
+# and the daemon transfer).
+.git/
+.nextflow/
+.omc/
+.claude/
+__pycache__/
+**/__pycache__/
+work/
+work_*/
+results/
+results_*/
+ref/
+data/
+docs/
+*.md
+*.bam
+*.bai
+*.cram
+*.fastq
+*.fastq.gz
+*.fq.gz
+*.sra
+*.vcf
+*.vcf.gz
+*.vcf.gz.tbi
+genome.bed
+panel.*

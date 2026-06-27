@@ -1,0 +1,23 @@
+# mrd-umi/utils — the ONLY custom image. The MRD engine (numpy/scipy/pysam +
+# bin/) plus lightweight CLI helpers, built the anti-balloon way:
+#   - slim base, never a full OS or a conda env
+#   - single apt layer, --no-install-recommends, lists removed in-layer
+#   - pip --no-cache-dir, every dep pinned ==  (no solver, no cache bloat)
+# Build:  docker build -f Dockerfile.utils -t mrd-umi/utils:1.0 .
+FROM python:3.11-slim
+
+# CLI helpers used by the panel/interrogate/background steps. One cleaned layer.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        samtools bcftools tabix bedtools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Engine deps, pinned to the validated versions. --no-cache-dir keeps it slim.
+RUN pip install --no-cache-dir \
+        numpy==2.3.4 \
+        scipy==1.17.1 \
+        pysam==0.23.3
+
+# Engine scripts last (only bin/ enters the build context; see .dockerignore).
+COPY bin/ /opt/mrd-umi/bin/
+ENV PATH=/opt/mrd-umi/bin:$PATH
+WORKDIR /work
