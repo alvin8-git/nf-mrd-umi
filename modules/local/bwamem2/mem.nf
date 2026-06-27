@@ -15,9 +15,14 @@ process BWAMEM2_MEM {
     path "versions.yml",            emit: versions
 
     script:
-    def rg = "@RG\\tID:${meta.id}\\tSM:${meta.id}\\tLB:${meta.id}\\tPL:ILLUMINA"
+    // -p for a single interleaved FASTQ (UMI flow); plain R1 R2 for WES.
+    // -C carries the FASTQ comment (RX/UMI) when present; harmless otherwise.
+    def sm = meta.sm ?: meta.id
+    def rg = "@RG\\tID:${meta.id}\\tSM:${sm}\\tLB:${meta.id}\\tPL:ILLUMINA"
+    def reads_list = reads instanceof List ? reads : [reads]
+    def pe = reads_list.size() == 2 ? '' : '-p'
     """
-    bwa-mem2 mem -t ${task.cpus} -p -C -R "${rg}" ${fasta} ${reads} > ${meta.id}.sam
+    bwa-mem2 mem -t ${task.cpus} ${pe} -C -R "${rg}" ${fasta} ${reads_list.join(' ')} > ${meta.id}.sam
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
