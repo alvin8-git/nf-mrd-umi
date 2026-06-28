@@ -149,6 +149,10 @@ process_one() {
 
   echo "[$srr] interrogate"
   python3 "$BINDIR/interrogate.py" run --bam "$bam" --panel "$PANEL" --out "$out"
+  # process_one is called under `|| ...`, which DISABLES errexit inside it, so a
+  # crashed interrogate (e.g. missing pysam) would otherwise fall through to a
+  # false "done". Gate on real output so the run is logged as a failure instead.
+  [[ -s $out ]] || { echo "[$srr] ERROR: interrogate produced no/empty output" >&2; rm -f "$out"; return 1; }
 
   [[ $KEEP -eq 1 ]] || rm -rf "$wd"
   echo "[$srr] done -> $out"
