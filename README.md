@@ -6,9 +6,11 @@ It detects cancer recurrence from a blood draw by tracking a patient's known
 tumor mutations down to ultra-low frequencies (below 0.1% variant allele
 fraction, toward 0.01%).
 
-> **Status: research-stage, not for clinical use.** The custom statistical
-> engine (`bin/`) is implemented and self-tested. The Nextflow orchestration is
-> designed but not yet built. See [Status](#status) and [TODO.md](TODO.md).
+> **Status: research-stage, not for clinical use.** Both Nextflow pipelines are
+> built (DSL2) and **Pipeline A is validated end-to-end on real SEQC2 data**
+> (somatic-calling F1 = 0.79 exome-restricted; FACETS purity/ploidy match the
+> HCC1395 truth). The MRD-call engine is self-tested and validated on a held-out
+> simulated cohort; real-data MRD LoD is in progress. See [Status](#status).
 
 New here? Read **[Documentation.md](Documentation.md)** first: it is a 101 on the
 clinical problem, the vocabulary, the architecture, the tools, and every design
@@ -18,19 +20,21 @@ decision.
 
 ## What it is
 
-Two pipelines:
+Two Nextflow DSL2 pipelines (`--workflow panel_design | mrd_monitor`):
 
 - **Pipeline A (panel design, once per patient):** matched tumor + buffy-coat
-  whole-exome sequencing (WES) -> somatic discovery -> purity/ploidy/clonality ->
-  CHIP/germline filtering -> personalized panel of trackable mutations.
-- **Pipeline B (MRD monitoring, every blood draw):** cfDNA + duplex UMI consensus
-  -> interrogate the known panel sites -> panel-integrated, enrichment-de-biased
-  MRD call (positive / negative / indeterminate, with tumor fraction, p-value,
-  and confidence interval).
+ whole-exome sequencing (WES) -> bwa-mem2 align -> Mutect2 somatic discovery ->
+ FACETS purity/ploidy + PyClone-vi clonality -> CHIP/germline/probe filtering ->
+ personalized panel of trackable mutations (`*.panel.{bed,vcf}`) + a patient-lock
+ provenance token (`*.panel.lock`).
+- **Pipeline B (MRD monitoring, every blood draw):** cfDNA + fgbio duplex UMI
+ consensus -> verify the patient-lock -> interrogate the known panel sites ->
+ panel-integrated, enrichment-de-biased MRD call (positive / negative /
+ indeterminate, with tumor fraction, p-value, CI, and provenance stamp).
 
-The standard genomics tools (fgbio, bwa-mem2, GATK Mutect2, PURPLE/FACETS,
-PyClone-vi, VEP) do the standard jobs. The MRD-specific logic, the part no
-off-the-shelf tool provides, lives in four custom Python scripts.
+Standard tools (fgbio, bwa-mem2, GATK Mutect2, FACETS, PyClone-vi, VEP, Picard)
+do the standard jobs. The MRD-specific logic - the part no off-the-shelf tool
+provides - lives in the custom Python engine in `bin/`.
 
 ---
 
@@ -38,102 +42,66 @@ off-the-shelf tool provides, lives in four custom Python scripts.
 
 ```
 nf-mrd-umi/
-+-- README.md            # this file
-+-- Documentation.md     # the 101: problem, terms, architecture, design decisions
-+-- TODO.md              # roadmap and known gaps
-+-- CLAUDE.md            # agent/tooling routing rules
-+-- bin/                 # the custom MRD engine (implemented, self-tested)
-    +-- panel_select.py    # Pipeline A: personalized panel selection
-    +-- interrogate.py     # Pipeline B: molecule counting at panel sites
-    +-- mrd_integrate.py   # Pipeline B: the MRD detection engine
-    +-- validate.py        # offline validation harness (LoB/LoD/LoQ, FPR)
++-- README.md / Documentation.md / TODO.md # this / the 101 / status & gaps
++-- VALIDATION.md / VALIDATION_COVERAGE.md # runbook / component->dataset+results
++-- VALIDATION_DATASETS.md / CONTAINERS.md # public data / container strategy
++-- main.nf, nextflow.config, conf/ # DSL2 entry + profiles (docker/test/local)
++-- modules/local/ subworkflows/local/ workflows/ # 20 modules, 3 subworkflows, 2 workflows
++-- bin/ # the custom engine + glue + drivers
+| +-- panel_select.py interrogate.py mrd_integrate.py # core MRD engine
+| +-- validate.py sample_id.py build_background.py # QC: harness / identity / null
+| +-- pyclone_prep.py normal_evidence.py # Pipeline A glue
+| +-- run_panel_design.sh run_validation_chain.sh ... # real-run drivers
++-- assets/example_panel_HCC1395/ # a real validated Pipeline A panel
++-- .github/workflows/ci.yml # selftests + both-pipeline stub-runs
 ```
-
-The Nextflow DSL2 modules and workflows are specified in the design docs but are
-not yet committed as `.nf` files.
-
----
-
-## Requirements
-
-The custom engine (everything in `bin/`):
-
-- Python 3.10+
-- `numpy`, `scipy` (statistics), `pysam` (only for the BAM/VCF I/O paths;
-  the `selftest` subcommands run without it)
-
-The full pipeline additionally needs (once the Nextflow layer is built):
-Nextflow, fgbio, bwa-mem2, GATK, CNVkit, PURPLE/FACETS/TITAN, PyClone-vi,
-Ensembl VEP, Picard, and the GRCh38 no-alt + decoy reference.
 
 ---
 
 ## Quickstart
 
-Everything in `bin/` is runnable today on synthetic data, no sequencing required.
-
-**Run every self-test:**
+**Every self-test (8 engine scripts), one command:**
 
 ```bash
-python3 bin/panel_select.py selftest
-python3 bin/interrogate.py selftest
-python3 bin/mrd_integrate.py selftest
-python3 bin/validate.py selftest
+bash bin/run_selftests.sh # panel_select, interrogate, mrd_integrate, validate,
+ # build_background, pyclone_prep, normal_evidence, sample_id
 ```
 
-**Run the validation harness** (simulates blank + dilution cohorts, fits the
-background on a training fold, evaluates a disjoint held-out fold, and reports
-specificity and sensitivity):
+**Validate the MRD math** (simulates blank + dilution cohorts, fits background on a
+training fold, evaluates a disjoint held-out fold, reports specificity/sensitivity):
 
 ```bash
 python3 bin/validate.py simulate-run --out /tmp/mrd_validation_report.json
+# empirical null FPR ~0.008 (vs nominal 0.05); LoD95 VAF ~1e-4
 ```
 
-Example output:
-
-```
-  null model        : empirical_donor_resampling
-  observed FPR      : 0.008   (OK)            # vs nominal alpha 0.05
-  LoB (tumor frac)  : 7.78e-06
-  LoD95 VAF         : 0.0001
-  LoQ VAF           : 0.0001
-  enrichment recov. : 1.004x of truth
-```
-
-**Compare the empirical null against the old independent null** on identical
-data (demonstrates why the empirical null matters):
+**Validate the Nextflow wiring offline** (no data, no containers - stub blocks only):
 
 ```bash
-python3 bin/validate.py simulate-run --null independent --out /tmp/indep.json
-python3 bin/validate.py simulate-run --null empirical   --out /tmp/emp.json
-# independent FPR ~0.28 (inflated) vs empirical ~0.01 (controlled)
+nextflow run main.nf -stub-run --workflow panel_design --input assets/samplesheet_wes_hcc1395.csv ...
+nextflow run main.nf -stub-run --workflow mrd_monitor --input assets/samplesheet_cfdna.csv ...
+```
+
+**Run Pipeline A for real** (needs reference + resources; see `bin/run_panel_design.sh`
+header and [VALIDATION.md](VALIDATION.md)):
+
+```bash
+bash bin/run_panel_design.sh # tumor/normal WES -> results/panel_design/*.panel.{bed,vcf,lock}
 ```
 
 ---
 
-## The four scripts
+## The custom engine
 
-| Script | Pipeline / stage | Command | Does |
-|---|---|---|---|
-| `panel_select.py` | A - panel design | `run`, `selftest` | Annotated somatic VCF -> personalized panel (BED + VCF), with CHIP/germline/probe filters and clonality ranking |
-| `interrogate.py` | B - stage B5 | `run`, `selftest` | Consensus BAM + panel -> per-site unique-molecule counts (duplex-aware) |
-| `mrd_integrate.py` | B - stage B6 | `run`, `selftest` | Per-site counts + background -> MRD call, tumor fraction, p-value, CI |
-| `validate.py` | offline QC | `simulate-run`, `run-real`, `selftest` | Measures false-positive rate, LoB, LoD95, LoQ, enrichment recovery |
-
-Each `run`/`simulate-run` command prints its own `--help`. Example end-to-end
-(Pipeline B scoring of one timepoint):
-
-```bash
-python3 bin/interrogate.py run \
-    --bam consensus.bam --panel panel.vcf --out site_counts.tsv
-
-python3 bin/mrd_integrate.py run \
-    --site-counts site_counts.tsv \
-    --background healthy_donor_background.tsv \
-    --pon healthy_donor_pon.tsv \
-    --patient-id PT001 --timepoint T1 \
-    --out PT001_T1.mrd.json
-```
+| Script | Pipeline / role | Commands |
+|---|---|---|
+| `panel_select.py` | A - personalized panel selection (CHIP/germline/probe/CCF) | `run`, `selftest` |
+| `interrogate.py` | B - duplex-aware unique-molecule counting at panel sites | `run`, `selftest` |
+| `mrd_integrate.py` | B - panel-integrated MRD call (empirical null + enrichment de-bias + provenance) | `run`, `selftest` |
+| `validate.py` | QC - offline harness (FPR, LoB, LoD95, LoQ, enrichment recovery) | `simulate-run`, `run-real`, `selftest` |
+| `sample_id.py` | QC - SNP-fingerprint concordance + patient-lock token (sample-swap protection) | `fingerprint`, `concordance`, `provenance`, `verify-lock`, `selftest` |
+| `build_background.py` | QC - healthy-donor blanks -> beta-binomial background + PoN | `run`, `selftest` |
+| `pyclone_prep.py`, `normal_evidence.py` | A glue - PyClone I/O + buffy-coat CHIP evidence | `build`/`to-ccf`, `pileup` |
 
 ---
 
@@ -141,22 +109,25 @@ python3 bin/mrd_integrate.py run \
 
 | Component | State |
 |---|---|
-| `bin/` custom engine (4 scripts) | Implemented, self-tested |
+| Custom MRD engine (`bin/`, 8 self-tested scripts) | Implemented, self-tested |
 | Empirical covariance-preserving null | Implemented, validated (FPR 0.28 -> 0.07) |
 | Odds-space enrichment de-biasing | Implemented, validated (recovery 0.43x -> 1.0x) |
-| Validation harness | Implemented (`simulate-run`, `run-real`, `selftest`) |
-| Nextflow DSL2 modules / workflows | Designed, not yet built |
-| Sample identity, run controls, provenance | Not yet implemented (required for clinical use) |
+| **Pipeline A (panel_design) DSL2** | **Built + validated on real SEQC2 HCC1395 WES** |
+| **Pipeline B (mrd_monitor) DSL2** | **Built; engine validated; real-data LoD in progress** |
+| **Sample identity / patient-lock / provenance** | **Implemented (`sample_id.py`) and wired into both pipelines** |
+| CI (selftests + stub-runs), PostToolUse hook, container pins | Implemented |
+| Run controls, full-depth cfDNA LoD, multi-caller consensus | Not yet (see TODO.md) |
 | SOPs / regulatory docs | Not started |
 
-**Self-tests prove the code implements its model, not that the model matches
-biology.** Real validity requires `validate.py run-real` on wet-lab dilution
-series and healthy-donor cohorts.
+**Real-data result (Pipeline A, SEQC2 HCC1395 / HCC1395BL WES):** 50-site panel,
+FACETS purity 0.90 / ploidy 3.06 (matches truth), somatic-SNV **F1 = 0.79**
+(precision 0.79 / recall 0.80) in the exome-callable HC region. A re-run with a
+Mutect2 panel-of-normals + gnomAD germline resource (toward ~0.9) is underway.
+Full method and numbers: [VALIDATION_COVERAGE.md](VALIDATION_COVERAGE.md). The
+validated panel is committed at `assets/example_panel_HCC1395/`.
 
-See [TODO.md](TODO.md) for the full roadmap (P0 clinical scaffolding, P1
-specificity hardening, P2 sensitivity and scope), and
-[VALIDATION.md](VALIDATION.md) for the real-world validation runbook (SEQC2
-public data -> real FPR/LoD/LoQ).
+See [TODO.md](TODO.md) for remaining gaps and [VALIDATION.md](VALIDATION.md) for
+the real-world validation runbook.
 
 ---
 

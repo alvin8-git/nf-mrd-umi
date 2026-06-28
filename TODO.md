@@ -21,29 +21,40 @@ Legend: `[x]` done | `[~]` partial | `[ ]` not started
       independent null (validated false-positive rate 0.28 -> 0.07 at nominal 0.05)
 - [x] **Odds-space enrichment calibration** - fixed the saturating VAF-space fit
       (enrichment recovery 0.43x -> 1.0x; valid Limit of Quantification appears)
-- [x] Self-tests for all four scripts
+- [x] Self-tests for all eight engine scripts (`bin/run_selftests.sh`)
+- [x] **Both Nextflow DSL2 pipelines built** - `panel_design` (A) + `mrd_monitor`
+      (B): 20 modules, 3 subworkflows, 2 workflows, `-stub-run` DAG-validated
+- [x] **Pipeline A validated end-to-end on real SEQC2 HCC1395/HCC1395BL WES** -
+      50-site panel; FACETS purity 0.90 / ploidy 3.06 (matches truth);
+      somatic-SNV **F1 = 0.79** exome-restricted (precision 0.79 / recall 0.80).
+      Method + numbers in [VALIDATION_COVERAGE.md](VALIDATION_COVERAGE.md); the
+      validated panel is committed at `assets/example_panel_HCC1395/`.
+- [x] **Six real-run bugs fixed that stub-runs cannot catch** - reference-companion
+      staging (bwa index / `.tbi` / `.fai`), bwa-mem2 `-C` corrupting WES SAMs,
+      pyclone_prep picking the normal sample, exec-bit, Mutect2 PoN/germline `.tbi`.
+- [x] CI (`.github/workflows/ci.yml`: selftests + both-pipeline stub-runs),
+      PostToolUse selftest hook, `nf-pipeline-reviewer` subagent, `publishDir`.
 
 ---
 
 ## P0 - Clinical defensibility (do before any real patient sample)
 
-- [ ] **Sample-identity concordance.** SNP-fingerprint module comparing the cfDNA
-      consensus BAM against the tumor/buffy WES; hard-fail the run on mismatch.
-      Without it, a sample swap produces a confident, wrong, signed-out result.
-      (Biggest accreditation risk.)
-- [ ] **Patient-locked, immutable panel artifact.** Hash + patient-stamp the
-      BED/VCF panel; `mrd_integrate` must refuse if the panel's patient_id differs
-      from `--patient-id`, and record the panel SHA256 in the result.
-- [ ] **Provenance in `mrd.json`.** Write background hash, panel hash, reference
-      hash, container digests, code version, and the RNG seed into the result so
-      it is reproducible and defensible.
-- [ ] **Validation harness on real data.** Run `validate.py run-real` against a
-      held-out healthy-donor blank cohort (-> empirical LoB/specificity) and a
-      contrived VAF dilution series (-> empirical LoD/LoQ). The simulator only
-      proves the implementation; real data proves the model.
-      **Candidate public datasets are catalogued in
-      [VALIDATION_DATASETS.md](VALIDATION_DATASETS.md)** — start with SEQC2
-      liquid biopsy (BioProject PRJNA677999).
+- [x] **Sample-identity concordance.** `bin/sample_id.py` - SNP-fingerprint
+      genotyping + concordance (`fingerprint`/`concordance`, exits non-zero on a
+      confirmed DIFFERENT verdict so a step can gate). Validates against matched
+      vs unrelated samples.
+- [x] **Patient-locked panel artifact + verify.** `PANEL_SELECT` emits a
+      content+patient hash (`*.panel.lock`, `panel-<N>-<sha>`); `MRD_INTEGRATE`
+      runs a fail-closed `sample_id.py verify-lock` before scoring (refuses a
+      mismatched panel / wrong patient).
+- [x] **Provenance stamp in `mrd.json`.** The panel-lock token is written into the
+      result (`mrd_integrate.py --panel-lock`). _Still to add: reference hash,
+      container digests, code version, RNG seed into the same block._
+- [~] **Validation harness on real data.** Pipeline A done (somatic F1 above).
+      Pipeline B: downsampled SEQC2 ILM2 titration chain (`run_validation_chain.sh`)
+      proves the cfDNA plumbing on real reads; **full-depth LoD/LoQ still pending**
+      (egress-bound; downsampled coverage is too sparse for a real limit). Datasets
+      in [VALIDATION_DATASETS.md](VALIDATION_DATASETS.md).
 - [ ] **Run-level controls.** Positive control, no-template control, and a
       contrived-VAF reference per run, with pass/fail QC gating that fails the
       whole run (not just one sample).
@@ -96,17 +107,24 @@ Legend: `[x]` done | `[~]` partial | `[ ]` not started
 
 ## Build-out (the orchestration layer)
 
-- [ ] **Nextflow DSL2 implementation.** Turn the Part-2 module design into real
-      `main.nf`, `workflows/`, `subworkflows/`, and `modules/` (nf-core style),
-      with two entry points (`panel_design`, `mrd_monitor`) and digest-pinned
-      containers.
+- [x] **Nextflow DSL2 implementation.** `main.nf` routes `--workflow
+      panel_design | mrd_monitor`; `workflows/`, `subworkflows/local/`,
+      `modules/local/` (nf-core style); one pinned biocontainer per tool in
+      `conf/docker.config` + one slim `mrd-umi/utils:1.0` engine image.
+- [x] **`--intervals` (exome BED) wired** into Mutect2 (optional). Passing it cuts
+      the whole-genome Mutect2 scan (~90 min) to minutes and sharpens WES calling.
 - [ ] **`probe_design.nf` subworkflow.** Interface to (adapt) the existing 2Strands
       probe-design workflow; feed designable/specific/enrichment scores back into
-      `panel_select`.
-- [ ] **Reference + determinism lock.** Pin GRCh38 no-alt + decoy by hash; pin
-      bwa-mem2 version and threading (thread-count non-determinism is a known trap).
+      `panel_select`. (`panel_select.py` already consumes probe scores; the
+      upstream design step is external.)
+- [~] **Reference + determinism lock.** Containers are digest-pinnable; still to do:
+      pin GRCh38 by hash and pin bwa-mem2 threading (thread-count non-determinism).
 - [ ] **`nf-test` fixtures** wrapping the modules, including a tiny BAM fixture so
-      `interrogate.py`'s pysam path gets exercised (today only its pure core is).
+      `interrogate.py`'s pysam path gets exercised (today only its pure core is,
+      via the CI stub-run + selftests).
+- [ ] **Mutect2 best-practice resources by default.** A re-run with a 1000G PoN +
+      gnomAD germline resource is in progress to lift somatic F1 from 0.79 toward
+      ~0.9 (the gap is germline/artifact FPs a PoN+gnomAD remove).
 
 ---
 

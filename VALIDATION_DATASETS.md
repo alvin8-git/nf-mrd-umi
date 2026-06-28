@@ -28,85 +28,97 @@ That piece requires in-house wet-lab data; there is no public substitute.
 
 ---
 
-## Tier 1 — Open access, directly usable
+## Tier 1 - Open access, directly usable
 
-### SEQC2 Liquid Biopsy (ctDNA) study  ★ best single dataset
+### SEQC2 Liquid Biopsy (ctDNA) study * best single dataset
 - **BioProject `PRJNA677999`** (raw sequencing data, SRA). Variant calls (VCF) +
-  panel BED files on figshare.
+ panel BED files on figshare.
 - Contrived ctDNA reference from the HCC1395 (triple-negative breast cancer) /
-  HCC1395BL (matched normal) cell-line pair, at a range of known VAFs, DNA inputs,
-  and sequencing depths, across 5 ctDNA assays and 12 labs, including UMI-based
-  assays. Purpose-built for ctDNA assay analytical validation.
+ HCC1395BL (matched normal) cell-line pair, at a range of known VAFs, DNA inputs,
+ and sequencing depths, across 5 ctDNA assays and 12 labs, including UMI-based
+ assays. Purpose-built for ctDNA assay analytical validation.
 - Validates: **LoD/LoQ, low-VAF detection, UMI consensus, blank/WT specificity.**
 - Paper: Gong, Deveson, Mercer et al., *Scientific Data* 2022,
-  doi:10.1038/s41597-022-01276-8 (PMC9008010).
+ doi:10.1038/s41597-022-01276-8 (PMC9008010).
 
 ### SEQC2 Somatic Mutation truth set (HCC1395 vs HCC1395BL)
 - **BioProject `PRJNA489865`** (paired tumor/normal reference materials). High-
-  confidence somatic call set (~40,000 SNVs, ~2,000 indels) + high-confidence
-  regions. Download paths and usage in GitHub `bioinform/somaticseq`
-  (`docs/seqc2.md`).
+ confidence somatic call set (~40,000 SNVs, ~2,000 indels) + high-confidence
+ regions. Download paths and usage in GitHub `bioinform/somaticseq`
+ (`docs/seqc2.md`).
 - Validates: **Pipeline A somatic discovery** (Mutect2 etc.), and provides the
-  truth backbone for any contrived tumor/normal mixture.
+ truth backbone for any contrived tumor/normal mixture.
 - Paper: Fang et al., *Nature Biotechnology* 2021, doi:10.1038/s41587-021-00857-z.
 
 ### UMI-aware ctDNA caller benchmark
 - Low-AF spike-ins (COSMIC v94, ~303 variants) and commercial cfDNA reference
-  standards (IDT + Twist) on SRA; evaluates simplex vs duplex consensus.
+ standards (IDT + Twist) on SRA; evaluates simplex vs duplex consensus.
 - Validates: **UMI/duplex consensus + low-frequency calling.**
 - Paper: *BMC Genomics* 2024 (PMC11370058).
 
 ### Supporting truth sets
 - **GIAB / NIST** (HG001-HG007, e.g. NA12878/HG002): germline high-confidence
-  truth. Validates the **germline-exclusion** step. Open (NCBI/NIST FTP).
+ truth. Validates the **germline-exclusion** step. Open (NCBI/NIST FTP).
 - **ICGC-TCGA DREAM Somatic Mutation Calling Challenge**: in-silico tumor/normal
-  with known implanted truth (via Synapse / ICGC). Validates somatic calling.
-  (Verify current access path before relying on it.)
+ with known implanted truth (via Synapse / ICGC). Validates somatic calling.
+ (Verify current access path before relying on it.)
 
 ---
 
-## Tier 2 — Commercial contrived reference standards
+## Tier 2 - Commercial contrived reference standards
 
 You buy the physical material and sequence it through the 2Strands assay. This is
 the **only practical way to validate the enrichment layer**, because you run them
 through the real probes.
 
-- **SeraCare Seraseq ctDNA v4 / Complete** — WT / 0.1% / 0.5% / 1% / 2.5% / 5%
-  VAF, 25-93 multiplexed variants, dPCR-quantified, purified-DNA or plasma-like
-  matrix. Ideal for the enrichment-calibration dilution series and LoD/LoQ.
-- **Horizon / Revvity** cfDNA reference standards — similar, multiplexed at
-  defined low VAFs.
+- **SeraCare Seraseq ctDNA v4 / Complete** - WT / 0.1% / 0.5% / 1% / 2.5% / 5%
+ VAF, 25-93 multiplexed variants, dPCR-quantified, purified-DNA or plasma-like
+ matrix. Ideal for the enrichment-calibration dilution series and LoD/LoQ.
+- **Horizon / Revvity** cfDNA reference standards - similar, multiplexed at
+ defined low VAFs.
 - **Twist Bioscience** cfDNA / ctDNA reference standards.
 
 ---
 
-## Tier 3 — Controlled-access patient MRD cohorts (end-to-end gold standard)
+## Tier 3 - Controlled-access patient MRD cohorts (end-to-end gold standard)
 
 These have matched tumor WES + serial plasma + clinical outcomes, the true test of
 tumor-informed MRD, but require a Data Access Committee application and (for
 TRACERx) a commercial arrangement.
 
-- **TRACERx (NSCLC)** — EGA `EGAS00001006494` (multiregion tumour WES),
-  `EGAS00001006517` (cfDNA). 197 patients, 1,069 plasma samples, ~200 mutations
-  tracked per patient. Abbosh et al., *Nature* 2023, doi:10.1038/s41586-023-05776-4.
-- **Whole-exome ctDNA MRD in localized colon cancer** — *Nature Cancer* 2025,
-  doi:10.1038/s43018-025-00960-z. Tumour-agnostic WES-ctDNA MRD cohort.
+- **TRACERx (NSCLC)** - EGA `EGAS00001006494` (multiregion tumour WES),
+ `EGAS00001006517` (cfDNA). 197 patients, 1,069 plasma samples, ~200 mutations
+ tracked per patient. Abbosh et al., *Nature* 2023, doi:10.1038/s41586-023-05776-4.
+- **Whole-exome ctDNA MRD in localized colon cancer** - *Nature Cancer* 2025,
+ doi:10.1038/s43018-025-00960-z. Tumour-agnostic WES-ctDNA MRD cohort.
 
 ---
 
 ## Recommended first step
 
 1. Pull **`PRJNA677999`** (SEQC2 liquid biopsy). Its WT samples become the
-   healthy-donor-style blank cohort for the empirical null; its VAF-titrated
-   samples become the LoD/LoQ series.
+ healthy-donor-style blank cohort for the empirical null; its VAF-titrated
+ samples become the LoD/LoQ series.
 2. Run them through `interrogate.py` -> `mrd_integrate.py`, then
-   `validate.py run-real` with a manifest, to get the first real specificity and
-   sensitivity numbers (not simulated).
+ `validate.py run-real` with a manifest, to get the first real specificity and
+ sensitivity numbers (not simulated).
 3. In parallel, buy a **SeraCare/Horizon/Twist** dilution series and run it through
-   the 2Strands assay to validate the enrichment de-biasing, the one thing public
-   data cannot cover.
+ the 2Strands assay to validate the enrichment de-biasing, the one thing public
+ data cannot cover.
 4. Longer term, apply to the **TRACERx** EGA DAC for a true end-to-end
-   tumor-informed MRD benchmark.
+ tumor-informed MRD benchmark.
+
+## What we actually pulled and used (2026-06-28)
+
+- **Pipeline A (done):** SEQC2 **PRJNA489865** WES pair - tumor HCC1395
+ `SRR7890850`, normal HCC1395BL `SRR7890851` (GRCh38). Plus GATK resources:
+ `1000G_phase1.snps.high_confidence.hg38.vcf.gz` (FACETS SNPs), ensembl-vep 116
+ GRCh38 cache, and (for the precision re-run) `af-only-gnomad.hg38.vcf.gz` +
+ `1000g_pon.hg38.vcf.gz`. Truth for the benchmark: SEQC2
+ `high-confidence_sSNV_in_HC_regions_v1.2.1`. Result: somatic-SNV F1 = 0.79
+ (exome-restricted) - see [VALIDATION_COVERAGE.md](VALIDATION_COVERAGE.md).
+- **Pipeline B (in progress):** SEQC2 **PRJNA677999** ILM2 titration, 48 runs,
+ downsampled - see [data/manifests/README.md](data/manifests/README.md).
 
 ## Sources
 - SEQC2 liquid biopsy: https://www.nature.com/articles/s41597-022-01276-8

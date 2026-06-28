@@ -32,14 +32,14 @@ detect its ctDNA, we could catch recurrence months earlier than imaging.
 The difficulty is the signal-to-noise ratio:
 
 - After successful treatment, ctDNA may be **less than 0.1%** of the cfDNA at a
-  given mutation site, and sometimes **below 0.01%**. That is one mutant molecule
-  hiding among ten thousand normal ones.
+ given mutation site, and sometimes **below 0.01%**. That is one mutant molecule
+ hiding among ten thousand normal ones.
 - Sequencing machines make mistakes at roughly the same rate (around 0.1% per
-  base). So the true signal is buried at or below the noise floor of the
-  instrument.
+ base). So the true signal is buried at or below the noise floor of the
+ instrument.
 - Biology adds more noise: aging blood cells accumulate their own mutations
-  (see **CHIP**, Section 4) that look exactly like tumor signal if you are not
-  careful.
+ (see **CHIP**, Section 4) that look exactly like tumor signal if you are not
+ careful.
 
 Beating this needs three things working together: a way to **remove sequencing
 errors** (UMIs and consensus calling), a way to **concentrate the true signal**
@@ -58,31 +58,31 @@ different inputs. Keeping them separate is a deliberate decision (Section 6.1).
 PIPELINE A - Panel Design (run ONCE per patient)
 -------------------------------------------------
 tumor biopsy WES -+
-                  +- align - somatic discovery - purity/ploidy/CN - clonality
-buffy-coat WES  --+   (Mutect2)      (PURPLE/FACETS/CNVkit) (PyClone-vi)
-                                                                  |
-                          annotate + germline/CHIP filter <-------+
-                          (VEP, gnomAD/dbSNP, buffy subtraction)
-                                                                  |
-                          probe-design feasibility <--------------+
-                          (adapt 2Strands probe workflow)
-                                                                  |
-                          PERSONALIZED PANEL  ---------------------> (to Pipeline B)
-                          (BED + VCF + per-probe enrichment factors)
+ +- align - somatic discovery - purity/ploidy/CN - clonality
+buffy-coat WES --+ (Mutect2) (PURPLE/FACETS/CNVkit) (PyClone-vi)
+ |
+ annotate + germline/CHIP filter <-------+
+ (VEP, gnomAD/dbSNP, buffy subtraction)
+ |
+ probe-design feasibility <--------------+
+ (adapt 2Strands probe workflow)
+ |
+ PERSONALIZED PANEL ---------------------> (to Pipeline B)
+ (BED + VCF + per-probe enrichment factors)
 
 PIPELINE B - MRD Monitoring (run at EVERY blood draw / timepoint)
 -------------------------------------------------
 cfDNA blood - UMI extract - align - group by UMI - duplex consensus - realign
-   (fgbio)                  (bwa-mem2)            (fgbio)
-                                                                  |
-                          interrogate panel sites <---------------+
-                          (count unique molecules supporting each known mutation)
-                                                                  |
-                          panel-integrated call <------------------+
-                          (empirical null + enrichment de-bias)
-                                                                  |
-                          MRD POSITIVE / NEGATIVE / INDETERMINATE
-                          + tumor fraction + p-value + confidence interval
+ (fgbio) (bwa-mem2) (fgbio)
+ |
+ interrogate panel sites <---------------+
+ (count unique molecules supporting each known mutation)
+ |
+ panel-integrated call <------------------+
+ (empirical null + enrichment de-bias)
+ |
+ MRD POSITIVE / NEGATIVE / INDETERMINATE
+ + tumor fraction + p-value + confidence interval
 ```
 
 **Pipeline A** answers "what should we watch for in this patient?" It reads the
@@ -206,10 +206,10 @@ sensitivity is limited by genome equivalents in the tube, not by the algorithm.
 answers here, for two different pipelines:
 
 - **Mutect2 Panel of Normals** (Pipeline A): built from normal WES samples,
-  filters recurrent technical artifacts during somatic discovery.
+ filters recurrent technical artifacts during somatic discovery.
 - **Healthy-donor cfDNA empirical null** (Pipeline B): built from healthy
-  blood samples run through the same assay, models the per-site error
-  distribution for the MRD statistics.
+ blood samples run through the same assay, models the per-site error
+ distribution for the MRD statistics.
 
 They are different analytes (tissue WES vs blood cfDNA) for different purposes.
 The pipeline needs both, and contrived reference samples (cell-line dilutions) are
@@ -250,31 +250,75 @@ high-CCF, not CHIP, not germline) and "enrichable" (a designable, specific probe
 exists). The selector pre-screens feasibility and ranks survivors by predicted
 enrichment, then hands candidates to the existing 2Strands probe-design workflow.
 
+### 6.9 Sample identity and the patient-lock (fail-closed)
+
+A tumor-informed assay has a failure mode that has nothing to do with statistics:
+running a patient's blood against **the wrong patient's panel** (a sample swap, a
+mislabeled tube). The defense is two independent mechanisms, both implemented in
+`bin/sample_id.py`:
+
+- **SNP-fingerprint concordance.** Genotype a fixed common-SNP set in two BAMs and
+ compare genotype dosage; a matched tumor/normal pair reads SAME, an unrelated
+ pair reads DIFFERENT. The `concordance` subcommand exits non-zero on a confirmed
+ DIFFERENT verdict, so a workflow step can gate on it.
+- **Patient-lock provenance token.** Pipeline A's `PANEL_SELECT` stamps every panel
+ with a `*.panel.lock` = `panel-<N>-<sha256>`, a deterministic hash over the
+ panel's content and patient id. Pipeline B's `MRD_INTEGRATE` runs a **fail-closed**
+ `sample_id.py verify-lock` *before* scoring: a panel whose lock does not match the
+ cfDNA sample's patient aborts the task rather than producing a number. The matched
+ token is then stamped into `mrd.json` (`mrd_integrate.py --panel-lock`) so the
+ result carries proof of which panel produced it.
+
 ---
 
 ## 7. The custom engine (`bin/`)
 
-Four Python scripts hold the MRD-specific logic. Each has a pure, unit-testable
-core and a `selftest` subcommand that runs on synthetic data with no sequencing
-required.
+**Eight self-tested Python scripts** hold the MRD-specific logic (the core engine
+plus the glue that adapts standard-tool output to it). Each has a pure,
+unit-testable core and a `selftest` subcommand that runs on synthetic data with no
+sequencing required; `bash bin/run_selftests.sh` runs all eight and exits non-zero
+if any fails.
 
-- **`panel_select.py`** (Pipeline A, panel design) - turns annotated somatic
-  variants into the personalized panel (BED + VCF). Applies SNV-only, CHIP and
-  buffy filters, gnomAD/dbSNP germline exclusion, minimum-CCF, and probe
-  feasibility; ranks by clonality, CCF, and predicted enrichment.
+Core engine:
+
+- **`panel_select.py`** (Pipeline A) - turns annotated somatic variants into the
+ personalized panel (BED + VCF). Applies SNV-only, CHIP and buffy filters,
+ gnomAD/dbSNP germline exclusion, minimum-CCF, and probe feasibility; ranks by
+ clonality, CCF, and predicted enrichment.
 - **`interrogate.py`** (Pipeline B, stage B5) - counts unique consensus molecules
-  supporting each panel mutation in a cfDNA sample, tracking duplex support and
-  consensus quality. Pure counting core is BAM-free testable.
+ supporting each panel mutation in a cfDNA sample, tracking duplex support and
+ consensus quality. Pure counting core is BAM-free testable.
 - **`mrd_integrate.py`** (Pipeline B, stage B6) - the MRD engine. Empirical
-  covariance-preserving null, Monte-Carlo p-value, odds-space enrichment
-  de-biasing, bootstrap confidence interval, and the Limit-of-Detection gate that
-  returns "indeterminate" rather than a false "negative" when molecular depth is
-  too low.
+ covariance-preserving null, Monte-Carlo p-value, odds-space enrichment
+ de-biasing, bootstrap confidence interval, and the Limit-of-Detection gate that
+ returns "indeterminate" rather than a false "negative" when molecular depth is
+ too low. Stamps the patient-lock token into `mrd.json`.
+
+QC / identity / background:
+
 - **`validate.py`** - the offline validation harness. Simulates blank and dilution
-  cohorts (or reads real ones), fits the background on a training fold, evaluates
-  a disjoint held-out fold, and reports false-positive rate, Limit of Blank,
-  LoD95, LoQ, and enrichment recovery. It is deliberately built to be able to
-  FAIL the engine: a clean report would mean the harness was circular.
+ cohorts (or reads real ones), fits the background on a training fold, evaluates
+ a disjoint held-out fold, and reports false-positive rate, Limit of Blank,
+ LoD95, LoQ, and enrichment recovery. It is deliberately built to be able to
+ FAIL the engine: a clean report would mean the harness was circular.
+- **`sample_id.py`** - sample-identity and patient-lock (Section 6.9): SNP-fingerprint
+ genotyping + `concordance` (sample-swap detection) and `provenance`/`verify-lock`
+ (the panel lock token).
+- **`build_background.py`** - builds the healthy-donor cfDNA empirical null
+ (per-site error distribution) that `mrd_integrate.py` consumes.
+
+Pipeline A glue:
+
+- **`pyclone_prep.py`** - adapts copy-number + somatic VCF into PyClone-vi input and
+ converts PyClone-vi output into the per-variant CCF / clonal-probability table
+ `panel_select.py` expects.
+- **`normal_evidence.py`** - summarizes matched-normal / buffy-coat support per
+ somatic site so `panel_select.py` can subtract germline and CHIP.
+
+Alongside these are **real-run driver scripts** (not part of the self-tested
+engine): `run_panel_design.sh`, `run_validation_chain.sh`, `fetch_url.py` (a
+resumable `urllib` downloader, because `curl`/`wget` are blocked in this
+environment), `fetch_wes.sh`, `queue_panel_design.sh`, and `build_panel.sh`.
 
 See [README.md](README.md) for exact commands.
 
@@ -286,9 +330,9 @@ It is worth being honest about physics. Detecting 0.01% VAF means finding roughl
 one mutant molecule among ten thousand. Two things make it possible:
 
 1. **Allele-specific enrichment** concentrates the mutant molecules so they are
-   over-represented in what gets sequenced.
+ over-represented in what gets sequenced.
 2. **Panel integration** pools weak evidence from dozens of mutation sites into
-   one call.
+ one call.
 
 But there is a floor nothing can cross: the number of **genome equivalents** in
 the blood tube. A standard ~30 ng draw is ~9,000 genome copies. You cannot detect
@@ -302,22 +346,82 @@ marketing number.
 
 ## 9. Status and limitations (read before trusting any output)
 
-This repository currently contains the **custom statistical engine** (`bin/`,
-self-tested) and the **full design** of the Nextflow orchestration. It is
-research-stage, not a validated clinical assay.
+This repository now contains the **custom statistical engine** (`bin/`,
+self-tested) AND the **built Nextflow orchestration** for both pipelines. It is
+still research-stage, not a validated clinical assay.
 
-- **Implemented and verified:** the four Python tools and their self-tests, plus
-  the validation harness with measured before/after numbers.
-- **Designed, not yet built:** the Nextflow DSL2 modules and workflows that wire
-  the standard tools (fgbio, bwa-mem2, Mutect2, etc.) together. These live as
-  design documents, not `.nf` files yet.
+- **Both DSL2 pipelines are built.** `main.nf` routes
+ `--workflow panel_design | mrd_monitor` to 2 workflows (`workflows/`) assembled
+ from 3 subworkflows (`subworkflows/local/`) and 20 process modules
+ (`modules/local/`). Containers follow the SVcaller convention: one pinned
+ biocontainer per standard tool (`conf/docker.config`, tags include the conda
+ build hash to avoid solver lockups and image balloon) plus one slim
+ `mrd-umi/utils:1.0` image for the whole custom Python engine.
+- **Engine verified:** all eight Python tools and their self-tests, plus the
+ validation harness with measured before/after numbers (Sections 6.3, 6.6).
+- **Sample identity / patient-lock is implemented and wired** (Section 6.9), not a
+ gap any more.
+
+### 9.1 Validation results (what has actually been run on real data)
+
+**Pipeline A - validated end-to-end on real SEQC2 WES.** Tumor HCC1395
+(SRR7890850) + matched normal HCC1395BL (SRR7890851), GRCh38, run through
+align -> Mutect2 -> FACETS -> VEP -> PyClone-vi -> panel selection. Results:
+
+- A 50-site personalized panel (committed at `assets/example_panel_HCC1395/`).
+- FACETS purity **0.90** / ploidy **3.06**, matching the known near-pure aneuploid
+ HCC1395 cell line - a cross-check that the run is real, not stubbed.
+- Somatic-SNV **F1 = 0.79** against the SEQC2 high-confidence truth set, evaluated
+ **exome-restricted** (precision 0.79 / recall 0.80). The naive genome-wide F1 of
+ **0.054** is a WES-vs-whole-genome-truth artifact (WES covers ~1-2% of the
+ genome, so ~38k truth SNVs are physically uncovered -> false FN); restricting the
+ truth to HC regions intersect tumor depth >=10x (from `mosdepth`) is what makes the
+ comparison fair. Full method and numbers live in
+ [VALIDATION_COVERAGE.md](VALIDATION_COVERAGE.md).
+
+**Pipeline B - plumbing proven, LoD still pending.** A downsampled
+(`fastq-dump -X`) SEQC2 ILM2 titration chain proves the cfDNA
+download -> align -> interrogate path on real reads, but per-site coverage is too
+sparse for a real limit-of-detection. Full-depth LoD/LoQ remains pending (it is
+egress-bound on this box).
+
+### 9.2 A lesson: `-stub-run` validates wiring, not behavior
+
+The Nextflow DAG was green under `-stub-run` (stub blocks just `touch` their
+outputs, so they prove channel/join wiring independent of tool behavior or
+reference contents) long before the first real run. A series of bugs that stubs
+**cannot** catch only surfaced on the real run, and were fixed:
+
+1. Reference companions not staged with the FASTA (bwa-mem2 index, the SNP `.tbi`,
+ the `.fai`).
+2. bwa-mem2 `-C` corrupting WES SAMs - `-C` is only valid for the interleaved
+ UMI/RX flow, not paired WES.
+3. `pyclone_prep` defaulting tumor to `samples[0]`, which Mutect2 had ordered as
+ the NORMAL (-> CCF 0 -> empty panel); fixed by passing `--tumor-sample`.
+4. A non-executable `bin/` script (exit 126).
+5. Mutect2 PoN / germline-resource `.tbi` indices not staged.
+
+The takeaway: stub-runs are necessary but not sufficient; only a real run exercises
+reference staging, tool flags, and sample ordering.
+
+### 9.3 Project plumbing
+
+- **CI** (`.github/workflows/ci.yml`) runs the self-tests and both-pipeline
+ `-stub-run` DAG checks - data-independent, no containers required.
+- A **PostToolUse hook** (`bin/hooks/selftest_on_edit.sh`) runs the matching
+ self-test on each `bin/*.py` edit, so a regression surfaces in-loop.
+- **`publishDir`** copies the panel to `results/panel_design` and `mrd.json` to
+ `results/mrd`.
+
+### 9.4 Still required before clinical use
+
 - **Important caveat on the self-tests:** they prove the code correctly implements
-  its model, not that the model matches real biology. Real validity comes only
-  from running `validate.py run-real` on wet-lab dilution series and healthy-donor
-  cohorts.
-- **Not yet present (and required before clinical use):** sample-identity
-  fingerprinting, run-level controls, result provenance/audit trail, the CHIP
-  gene-list refinement, fragment-end trimming, and SOPs. These are tracked in
-  [TODO.md](TODO.md).
+ its model, not that the model matches real biology. Real validity comes only
+ from running `validate.py run-real` on wet-lab dilution series and healthy-donor
+ cohorts, and from a full-depth cfDNA LoD.
+- **Not yet present:** run-level controls, the CHIP gene-list refinement
+ (Section 6.7), fragment-end trimming, a complete provenance/audit block (the
+ patient-lock is stamped, but reference hash / container digests / code version /
+ RNG seed are not yet), and SOPs. These are tracked in [TODO.md](TODO.md).
 
 Nothing here is for clinical decision-making in its current form.
