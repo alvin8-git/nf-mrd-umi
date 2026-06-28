@@ -32,3 +32,24 @@ sample (NA12878) to complete the identity DIFFERENT case.
 - A large matched healthy-donor cfDNA null (#5 external) — controlled-access.
 - Full-depth cfDNA LoD/LoQ — egress-bound on this box; needs the full-depth runs or a
   targeted (not WGS) cfDNA cohort so coverage concentrates on panel sites.
+
+## Pipeline A wiring validation (2026-06-28)
+
+`nextflow run main.nf -stub-run --workflow panel_design` with the real HCC1395 WES
+samplesheet + resource paths **passed (exit 0)** — all 14 tasks green:
+
+```
+ALIGN_WES (BWAMEM2_MEM T+N -> SAMTOOLS_SORT -> PICARD_MARKDUPLICATES)
+GATK4_MUTECT2 -> GATK4_FILTERMUTECTCALLS
+FACETS | VEP
+PYCLONE_PREP -> PYCLONEVI
+NORMAL_EVIDENCE
+PANEL_SELECT -> HCC1395.panel.bed + HCC1395.panel.vcf
+```
+
+Confirms tumor/normal pairing by patient and the three-way joins
+(`somatic x FACETS.cnv x purity`, `VEP x ccf x normal_evidence`) resolve. `-stub-run`
+exercises wiring only (stub touch/echo blocks), so it is independent of VEP cache
+contents. Launch the real run via `bin/run_panel_design.sh` once the VEP cache finishes
+and the box egress frees up (first run also pulls the gatk4/picard/vep/facets/pyclone-vi
+biocontainers pinned in `conf/docker.config`).
