@@ -6,6 +6,7 @@ process PANEL_SELECT {
     tag "${meta.id}"
     label 'process_low'
     container 'mrd-umi/utils:1.0'
+    publishDir "${params.outdir}/panel_design", mode: 'copy'
 
     input:
     tuple val(meta), path(annotated_vcf), path(vcf_tbi), path(ccf_tsv), path(normal_evidence)

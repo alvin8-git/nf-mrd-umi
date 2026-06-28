@@ -24,7 +24,7 @@ GERMLINE=${GERMLINE:-}        # af-only-gnomad.hg38.vcf.gz  (Mutect2 germline re
 PON=${PON:-}                  # 1000g_pon.hg38.vcf.gz       (Mutect2 panel-of-normals, WES)
 INTERVALS=${INTERVALS:-}      # WES target BED (LL center exome kit; speeds/sharpens Mutect2)
 
-OUTDIR=${OUTDIR:-results/panel_design}
+OUTDIR=${OUTDIR:-results}   # PANEL_SELECT publishes to ${outdir}/panel_design
 
 # --- fail loud on missing required inputs ---
 for f in "$FASTA" "$FAI" "$DICT" "$SAMPLESHEET" "$CHIP" "$SNP_VCF" "$VEP_CACHE"; do

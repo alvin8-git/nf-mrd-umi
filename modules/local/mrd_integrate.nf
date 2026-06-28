@@ -4,6 +4,7 @@ process MRD_INTEGRATE {
     tag "${meta.id}"
     label 'process_medium'
     container 'mrd-umi/utils:1.0'
+    publishDir "${params.outdir}/mrd", mode: 'copy'
 
     input:
     tuple val(meta), path(site_counts)
