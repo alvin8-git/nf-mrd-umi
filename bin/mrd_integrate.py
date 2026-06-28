@@ -326,6 +326,10 @@ def cmd_run(args) -> None:
     )
     result["patient_id"] = args.patient_id
     result["timepoint"] = args.timepoint
+    if args.panel_lock:
+        # provenance: bind this call to the exact patient-locked panel it scored
+        with open(args.panel_lock) as fh:
+            result["panel_lock"] = fh.read().strip()
     with open(args.out, "w") as fh:
         json.dump(result, fh, indent=2)
     print(f"{result['call']}  TF={result['tumor_fraction']:.2e}  "
@@ -418,6 +422,8 @@ def main() -> None:
                    help="healthy-donor panel-of-normals TSV for the empirical "
                         "null (per-site per-donor error rates); strongly advised")
     r.add_argument("--panel", required=False, help="panel VCF (provenance only)")
+    r.add_argument("--panel-lock", dest="panel_lock", default=None,
+                   help="patient-lock token file (sample_id.py provenance); stamped into mrd.json")
     r.add_argument("--out", required=True)
     r.add_argument("--patient-id", dest="patient_id", default="NA")
     r.add_argument("--timepoint", default="NA")

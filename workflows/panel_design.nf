@@ -69,5 +69,5 @@ workflow PANEL_DESIGN {
         .map { m, vcf, tbi, ccf, ne -> tuple(m, vcf, tbi, ccf, ne) }
     PANEL_SELECT(ch_sel, chip_bl)
 
-    PANEL_SELECT.out.panel.view { m, bed, vcf -> "PANEL ${m.id} -> ${bed}, ${vcf}" }
+    PANEL_SELECT.out.panel.view { m, bed, vcf, lock -> "PANEL ${m.id} -> ${bed}, ${vcf} (lock ${lock})" }
 }

@@ -12,7 +12,7 @@ process PANEL_SELECT {
     path chip_blocklist
 
     output:
-    tuple val(meta), path("*.panel.bed"), path("*.panel.vcf"), emit: panel
+    tuple val(meta), path("*.panel.bed"), path("*.panel.vcf"), path("*.panel.lock"), emit: panel
     path "versions.yml", emit: versions
 
     script:
@@ -28,9 +28,14 @@ process PANEL_SELECT {
         --panel-size ${params.panel_size} --min-ccf ${params.min_ccf} \\
         --out-bed ${meta.id}.panel.bed --out-vcf ${meta.id}.panel.vcf
 
-    echo '"${task.process}": {panel_select: bin}' > versions.yml
+    # patient-lock: a content+patient hash of the panel; Pipeline B refuses to
+    # interrogate a cfDNA sample against a panel whose lock does not match.
+    sample_id.py provenance --panel ${meta.id}.panel.vcf \\
+        --patient-id ${meta.id} --out ${meta.id}.panel.lock
+
+    echo '"${task.process}": {panel_select: bin, sample_id: bin}' > versions.yml
     """
 
     stub:
-    "touch ${meta.id}.panel.bed ${meta.id}.panel.vcf versions.yml"
+    "touch ${meta.id}.panel.bed ${meta.id}.panel.vcf ${meta.id}.panel.lock versions.yml"
 }

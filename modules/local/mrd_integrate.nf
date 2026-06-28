@@ -10,18 +10,25 @@ process MRD_INTEGRATE {
     path  background
     path  pon            // optional panel-of-normals (empirical null); [] if none
     path  panel_vcf
+    path  panel_lock     // optional patient-lock token (Pipeline A); [] if none
 
     output:
     tuple val(meta), path("*.mrd.json"), emit: report
     path "versions.yml",                 emit: versions
 
     script:
-    def pon_arg = pon ? "--pon ${pon}" : ""
+    def pon_arg  = pon ? "--pon ${pon}" : ""
+    def lock_arg = panel_lock ? "--panel-lock ${panel_lock}" : ""
+    // fail-closed: refuse to score this cfDNA sample against a panel whose lock
+    // does not match its patient (sample swap / wrong-panel protection).
+    def lock_gate = panel_lock ? "sample_id.py verify-lock --panel ${panel_vcf} --lock ${panel_lock} --patient-id ${meta.patient}" : "true"
     """
+    ${lock_gate}
+
     mrd_integrate.py run \\
         --site-counts ${site_counts} \\
         --background ${background} ${pon_arg} \\
-        --panel ${panel_vcf} \\
+        --panel ${panel_vcf} ${lock_arg} \\
         --patient-id ${meta.patient} --timepoint ${meta.timepoint} \\
         --min-molecules ${params.min_molecules} \\
         --out ${meta.id}.mrd.json

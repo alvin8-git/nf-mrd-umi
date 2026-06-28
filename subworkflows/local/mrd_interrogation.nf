@@ -9,10 +9,11 @@ workflow MRD_INTERROGATION {
     panel_vcf
     background
     pon           // [] if no panel-of-normals
+    panel_lock    // [] if no patient-lock token
 
     main:
     INTERROGATE(ch_bam, panel_vcf)
-    MRD_INTEGRATE(INTERROGATE.out.counts, background, pon, panel_vcf)
+    MRD_INTEGRATE(INTERROGATE.out.counts, background, pon, panel_vcf, panel_lock)
 
     emit:
     report = MRD_INTEGRATE.out.report   // [meta, *.mrd.json]

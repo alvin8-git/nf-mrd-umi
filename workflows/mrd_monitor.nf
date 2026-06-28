@@ -17,9 +17,10 @@ workflow MRD_MONITOR {
     panel_bed  = file(params.panel_bed)
     background = file(params.background)
     pon        = params.pon ? file(params.pon) : []
+    panel_lock = params.panel_lock ? file(params.panel_lock) : []
 
     UMI_CONSENSUS(ch_reads, fasta, fasta_dict, panel_bed)
-    MRD_INTERROGATION(UMI_CONSENSUS.out.consensus_bam, panel_vcf, background, pon)
+    MRD_INTERROGATION(UMI_CONSENSUS.out.consensus_bam, panel_vcf, background, pon, panel_lock)
 
     MRD_INTERROGATION.out.report.view { meta, json -> "MRD ${meta.id} -> ${json}" }
 }
