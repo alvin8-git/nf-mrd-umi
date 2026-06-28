@@ -118,6 +118,18 @@ constant odds-multiplier. Both are checkable but unproven here:
   dataset can substitute.
 
 
+**In-silico stand-in (until the real series arrives).** `validate.py
+simulate-from-real` builds exactly this cohort semi-synthetically: real ILM2
+blanks supply the per-site depth/error structure, a synthetic forward enrichment
+plus dilution plants healthy / tumor-ladder / a held-out dummy-patient sample, and
+the real calibrate -> de-bias -> call flow runs on top. Its
+`--enrichment-model constant|saturating` knob deliberately makes the forward model
+*differ* from the de-biaser's constant-odds assumption, so it measures how
+gracefully recovery degrades under model misspecification (enrichment recovery
+~1.0x well-specified vs ~0.67x saturating; the dummy 0.05% patient is recovered to
+within a few percent in the well-specified case). It validates the integration on
+realistic structure -- it does **not** replace the real 2Strands dilution series.
+
 ### 3.1 A concrete walk-through (the ILM2 cohort through Pipeline B)
 
 The pipeline is easiest to understand by following two real ILM2 runs through it
