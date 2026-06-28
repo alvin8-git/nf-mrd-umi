@@ -7,7 +7,9 @@ venv/
 
 # Agent / local tool state (not project source)
 .omc/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/agents/
 *.local.json
 
 # Pipeline outputs and large data (regenerated; never source-controlled)
