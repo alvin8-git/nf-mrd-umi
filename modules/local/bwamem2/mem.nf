@@ -21,9 +21,14 @@ process BWAMEM2_MEM {
     def sm = meta.sm ?: meta.id
     def rg = "@RG\\tID:${meta.id}\\tSM:${sm}\\tLB:${meta.id}\\tPL:ILLUMINA"
     def reads_list = reads instanceof List ? reads : [reads]
-    def pe = reads_list.size() == 2 ? '' : '-p'
+    // 1 interleaved FASTQ => UMI/consensus flow (-p), and its comment is a real
+    // aux tag (RX:Z:...) so -C is valid. 2 FASTQs => WES: NO -p, and NO -C (a
+    // plain Illumina comment is not an aux tag and -C would corrupt the SAM).
+    def interleaved  = reads_list.size() != 2
+    def pe           = interleaved ? '-p' : ''
+    def copy_comment = interleaved ? '-C' : ''
     """
-    bwa-mem2 mem -t ${task.cpus} ${pe} -C -R "${rg}" ${fasta} ${reads_list.join(' ')} > ${meta.id}.sam
+    bwa-mem2 mem -t ${task.cpus} ${pe} ${copy_comment} -R "${rg}" ${fasta} ${reads_list.join(' ')} > ${meta.id}.sam
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
