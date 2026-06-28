@@ -49,7 +49,108 @@ Those three ideas are the spine of this pipeline.
 
 ---
 
-## 3. The two-pipeline architecture
+## 3. How the assay is validated: public ctDNA data vs the 2Strands probes
+
+A pipeline that claims sub-0.1% detection has to be *proven*, not asserted. Two
+kinds of data prove different parts of it, and it helps to see early why neither
+alone is enough.
+
+**The shape of a validation cohort.** Whatever the assay, you validate an MRD
+pipeline with the same cohort shape:
+
+- **Blanks** (tumor-free cfDNA): no tumor signal, so anything the pipeline calls
+  in them is noise. The blanks *are* the background/null (`build_background.py`),
+  and held-out blanks measure specificity / Limit of Blank.
+- **A dilution series** (tumor titrated into normal at known fractions): each
+  level is a sample whose true VAF you already know, so you can ask "did we detect
+  it, and was the reported tumor fraction right?" -- that gives Limit of
+  Detection, Limit of Quantitation, and quantification bias.
+
+**What the public SEQC2 ILM2 cohort gives us.** The 48-run ILM2 titration
+(HCC1395 tumor into HCC1395BL normal: 12 blanks at 0%, 24 at 2%, 12 at 10%) is
+exactly that shape, on a *standard* Illumina ctDNA assay. It validates consensus,
+interrogation, the empirical null, and the LoB/LoD/LoQ math on real reads. Because
+HCC1395 is also the cell line Pipeline A discovers mutations from, the two halves
+meet on the same "patient": Pipeline A finds the mutations, the ILM2 cfDNA
+dilutions are where Pipeline B tracks them. (See
+[data/manifests/README.md](data/manifests/README.md) and
+[VALIDATION_DATASETS.md](VALIDATION_DATASETS.md).)
+
+**What it CANNOT give us: the enrichment layer.** ILM2 is a standard assay, so its
+panel sites read at roughly their true VAF (enrichment = 1). The 2Strands assay is
+different: allele-specific probes *amplify the mutant allele*, so the observed VAF
+is pushed up. A single real 2Strands run is, in role, like one ILM2 dilution
+sample at a known VAF -- but its observed VAF is inflated, and recovering the true
+VAF is the whole job.
+
+**Recovering the true VAF when the enrichment factor is unknown.** For one unknown
+sample you cannot: `observed_odds = enrichment x true_odds` is one equation with
+two unknowns. So enrichment is not estimated per patient; it is *calibrated once*
+as a property of the assay, then applied:
+
+1. **Calibrate** on a 2Strands dilution series with known true VAFs. With true and
+   observed both in hand, enrichment is the only unknown, and
+   `fit_enrichment_from_dilution()` solves for it (panel-average, or per-probe if
+   there is enough signal per site).
+2. **Apply** to a patient sample: enrichment is now a known constant, so invert it
+   -- `true_odds = observed_odds / enrichment` -- and read off the true VAF
+   (`estimate_vaf(..., apply_enrichment=True)`).
+
+It is a weighing scale: calibrate with known weights once, then weigh unknowns.
+
+**Why odds-space.** Enrichment multiplies *odds* by a constant; in VAF-space the
+same effect saturates (a 10x boost cannot take 30% to 300%). Odds-space keeps the
+relationship linear and invertible. This is not cosmetic: the VAF-space fit
+recovered only 0.43x of the true enrichment, the odds-space fit ~1.0x (see
+[Section 7.3](#73-allele-specific-enrichment-and-odds-space-de-biasing) and the
+`validate.py` numbers).
+
+**The two things still required.** Calibrate-once-apply assumes enrichment is
+*stable* (same multiplier in the patient run as at calibration) and acts as a
+constant odds-multiplier. Both are checkable but unproven here:
+
+- **Drift** is caught by a **per-run enrichment control** (a known-VAF spike-in
+  every run) -- a run-level control on the roadmap ([TODO.md](TODO.md) P0).
+- **Model correctness** -- that real probes behave as a clean odds-multiplier --
+  can only be confirmed on a real 2Strands dilution series; the simulator cannot
+  prove it (the open question in [TODO.md](TODO.md)). That low-VAF series (ideally
+  down to 0.01-0.1%, where enrichment earns its keep) is the one piece no public
+  dataset can substitute.
+
+
+### 3.1 A concrete walk-through (the ILM2 cohort through Pipeline B)
+
+The pipeline is easiest to understand by following two real ILM2 runs through it
+-- one blank, one tumor-spiked. `bin/run_validation_chain.sh` does all of this;
+here is what each step produces.
+
+1. **Fetch + align.** For each run accession (a 0% blank, and the 10% sample
+   `SRR13385630`): `fastq-dump -X 3000000` pulls a downsampled slice and
+   `bwa-mem2` aligns it to GRCh38 -> a sorted BAM.
+2. **Interrogate the panel.** `interrogate.py run --bam <run>.bam --panel
+   panel.vcf.gz` counts unique molecules at each of the 39,447 HCC1395 panel
+   sites -> `<run>.site_counts.tsv` (per site: depth, alt-count, duplex support).
+   In the blank, alt-counts at the tumor sites are ~0 (just error); in the 10%
+   sample they sit near the expected VAF.
+3. **Build the background from the blanks.** `build_background.py` fits a per-site
+   beta-binomial error model from the 12 Bf blank tables -> `background.tsv`
+   (+ `pon.tsv`, the donor-by-site matrix for the empirical null). This is the
+   "what does noise look like here" model.
+4. **Score each sample.** `mrd_integrate.py run --site-counts <run>.tsv
+   --background background.tsv --pon pon.tsv` pools the panel sites into one
+   tumor-fraction estimate, a Monte-Carlo p-value against the empirical null, and
+   a bootstrap CI -> `<run>.mrd.json` (call: positive / negative / indeterminate).
+5. **Read the cohort out.** `validate.py run-real` fits on a held-out split of
+   blanks and reports the false-positive rate on the other blanks (specificity)
+   and the hit-rate at each VAF level (2%, 10%).
+
+Expected shape: blanks call negative (a few false positives bound specificity),
+10% samples call positive comfortably, 2% samples sit near the limit of detection.
+**Caveat:** at the downsampled depth used here (median ~1 molecule/site) those
+numbers only demonstrate the flow; a real specificity/LoD needs full-depth runs
+(Section 9, [VALIDATION.md](VALIDATION.md)).
+
+## 4. The two-pipeline architecture
 
 The work splits cleanly into two pipelines that run on different schedules and
 different inputs. Keeping them separate is a deliberate decision (Section 6.1).
@@ -95,7 +196,7 @@ produces a single yes/no/unsure call. It runs every time the patient gives blood
 
 ---
 
-## 4. Vocabulary (the terms you will keep meeting)
+## 5. Vocabulary (the terms you will keep meeting)
 
 | Term | Plain meaning |
 |---|---|
@@ -121,7 +222,7 @@ produces a single yes/no/unsure call. It runs every time the patient gives blood
 
 ---
 
-## 5. The technologies, and what each one is for
+## 6. The technologies, and what each one is for
 
 The full pipeline is a chain of best-in-class genomics tools plus a custom
 statistical engine. Standard tools do the standard jobs; the custom Python
@@ -143,12 +244,12 @@ statistical engine. Standard tools do the standard jobs; the custom Python
 
 ---
 
-## 6. Design decisions and the reasons behind them
+## 7. Design decisions and the reasons behind them
 
 This is the part worth reading slowly. Each decision exists because a simpler
 choice fails in a specific, concrete way.
 
-### 6.1 Two pipelines, and interrogation instead of variant calling
+### 7.1 Two pipelines, and interrogation instead of variant calling
 
 A natural first instinct is to run a somatic variant caller (like Mutect2) on the
 blood sample. This is wrong for the monitoring step. General somatic callers have
@@ -163,7 +264,7 @@ whether that exceeds the site's error floor. Calling is a discovery problem;
 MRD is a genotyping-at-known-sites problem. Mixing the two is why the design is
 split into two pipelines (A = discovery, B = interrogation).
 
-### 6.2 Duplex UMIs (and why paired-end is not duplex)
+### 7.2 Duplex UMIs (and why paired-end is not duplex)
 
 To suppress sequencing errors to the 1e-7 level needed for sub-0.1% detection,
 the assay uses **duplex** consensus: a true mutation must appear on BOTH the
@@ -173,7 +274,7 @@ both ends of one fragment; duplex means you separately tag and confirm both
 complementary strands. Duplex needs specific adapter chemistry (assumed present
 here). Without it, the honest detection floor is closer to 0.1-1%.
 
-### 6.3 Allele-specific enrichment, and odds-space de-biasing
+### 7.3 Allele-specific enrichment, and odds-space de-biasing
 
 2Strands' probes selectively capture the mutant allele, which concentrates the
 signal and lets the assay run "at a fraction of the sequencing burden". This is
@@ -189,7 +290,7 @@ factor in plain VAF space, which saturated at high calibration points and
 under-recovered enrichment by ~2.3x; the odds model removed that bias (recovery
 went from 0.43x to ~1.0x of truth, and a valid Limit of Quantification appeared).
 
-### 6.4 Panel-integrated detection (no single site carries the call)
+### 7.4 Panel-integrated detection (no single site carries the call)
 
 At 0.01% VAF, no single mutation site has enough molecules to be confident on its
 own. The detection has to **integrate signal across the whole panel** of mutations
@@ -200,7 +301,7 @@ timepoint. Detection is always a composite call, never per-variant. This is what
 makes sub-0.1% sensitivity possible at all, and it is bounded by the input mass:
 sensitivity is limited by genome equivalents in the tube, not by the algorithm.
 
-### 6.5 Two different backgrounds, never conflated
+### 7.5 Two different backgrounds, never conflated
 
 "What does noise look like in a sample without the tumor?" has two different
 answers here, for two different pipelines:
@@ -215,7 +316,7 @@ They are different analytes (tissue WES vs blood cfDNA) for different purposes.
 The pipeline needs both, and contrived reference samples (cell-line dilutions) are
 for validation only, not as the running null.
 
-### 6.6 The empirical, covariance-preserving null
+### 7.6 The empirical, covariance-preserving null
 
 The MRD null model is the heart of specificity (avoiding false positives). The
 naive approach draws each site's error independently. But real cfDNA errors are
@@ -231,7 +332,7 @@ false-positive rate from ~28% (independent null) back to ~7% (near the nominal 5
 target) with no loss of sensitivity. The independent null is kept only as a
 back-compatible fallback that warns when used.
 
-### 6.7 CHIP handled by biology, not by a gene list
+### 7.7 CHIP handled by biology, not by a gene list
 
 Clonal hematopoiesis mutations in the patient's blood cells are the dominant
 false-positive risk. The correct defense is to sequence the **buffy coat** (white
@@ -241,7 +342,7 @@ list: today's panel-selection also drops variants by CHIP gene name, which is to
 blunt because genes like DNMT3A and TET2 are both CHIP genes and real tumor
 drivers. See [TODO.md](TODO.md).)
 
-### 6.8 Probe-feasibility-aware panel selection
+### 7.8 Probe-feasibility-aware panel selection
 
 Not every biologically informative mutation can be turned into a good
 allele-specific probe (some have bad GC content, homopolymer runs, or poor
@@ -250,7 +351,7 @@ high-CCF, not CHIP, not germline) and "enrichable" (a designable, specific probe
 exists). The selector pre-screens feasibility and ranks survivors by predicted
 enrichment, then hands candidates to the existing 2Strands probe-design workflow.
 
-### 6.9 Sample identity and the patient-lock (fail-closed)
+### 7.9 Sample identity and the patient-lock (fail-closed)
 
 A tumor-informed assay has a failure mode that has nothing to do with statistics:
 running a patient's blood against **the wrong patient's panel** (a sample swap, a
@@ -271,7 +372,7 @@ mislabeled tube). The defense is two independent mechanisms, both implemented in
 
 ---
 
-## 7. The custom engine (`bin/`)
+## 8. The custom engine (`bin/`)
 
 **Eight self-tested Python scripts** hold the MRD-specific logic (the core engine
 plus the glue that adapts standard-tool output to it). Each has a pure,
@@ -324,7 +425,7 @@ See [README.md](README.md) for exact commands.
 
 ---
 
-## 8. How sensitivity actually works (and its hard limit)
+## 9. How sensitivity actually works (and its hard limit)
 
 It is worth being honest about physics. Detecting 0.01% VAF means finding roughly
 one mutant molecule among ten thousand. Two things make it possible:
@@ -344,7 +445,7 @@ marketing number.
 
 ---
 
-## 9. Status and limitations (read before trusting any output)
+## 10. Status and limitations (read before trusting any output)
 
 This repository now contains the **custom statistical engine** (`bin/`,
 self-tested) AND the **built Nextflow orchestration** for both pipelines. It is
@@ -362,7 +463,7 @@ still research-stage, not a validated clinical assay.
 - **Sample identity / patient-lock is implemented and wired** (Section 6.9), not a
  gap any more.
 
-### 9.1 Validation results (what has actually been run on real data)
+### 10.1 Validation results (what has actually been run on real data)
 
 **Pipeline A - validated end-to-end on real SEQC2 WES.** Tumor HCC1395
 (SRR7890850) + matched normal HCC1395BL (SRR7890851), GRCh38, run through
@@ -385,7 +486,7 @@ download -> align -> interrogate path on real reads, but per-site coverage is to
 sparse for a real limit-of-detection. Full-depth LoD/LoQ remains pending (it is
 egress-bound on this box).
 
-### 9.2 A lesson: `-stub-run` validates wiring, not behavior
+### 10.2 A lesson: `-stub-run` validates wiring, not behavior
 
 The Nextflow DAG was green under `-stub-run` (stub blocks just `touch` their
 outputs, so they prove channel/join wiring independent of tool behavior or
@@ -404,7 +505,7 @@ reference contents) long before the first real run. A series of bugs that stubs
 The takeaway: stub-runs are necessary but not sufficient; only a real run exercises
 reference staging, tool flags, and sample ordering.
 
-### 9.3 Project plumbing
+### 10.3 Project plumbing
 
 - **CI** (`.github/workflows/ci.yml`) runs the self-tests and both-pipeline
  `-stub-run` DAG checks - data-independent, no containers required.
@@ -413,15 +514,52 @@ reference staging, tool flags, and sample ordering.
 - **`publishDir`** copies the panel to `results/panel_design` and `mrd.json` to
  `results/mrd`.
 
-### 9.4 Still required before clinical use
+### 10.4 Still required before clinical use
 
 - **Important caveat on the self-tests:** they prove the code correctly implements
  its model, not that the model matches real biology. Real validity comes only
  from running `validate.py run-real` on wet-lab dilution series and healthy-donor
  cohorts, and from a full-depth cfDNA LoD.
 - **Not yet present:** run-level controls, the CHIP gene-list refinement
- (Section 6.7), fragment-end trimming, a complete provenance/audit block (the
+ (Section 7.7), fragment-end trimming, a complete provenance/audit block (the
  patient-lock is stamped, but reference hash / container digests / code version /
  RNG seed are not yet), and SOPs. These are tracked in [TODO.md](TODO.md).
 
 Nothing here is for clinical decision-making in its current form.
+
+## References (selected methodology)
+
+Datasets used for validation are cited in
+[VALIDATION_DATASETS.md](VALIDATION_DATASETS.md). The methods this pipeline builds
+on:
+
+**Tumor-informed ctDNA / MRD**
+- Abbosh C, et al. Phylogenetic ctDNA analysis depicts early-stage lung cancer evolution. *Nature*. 2017;545:446-451.
+- Wan JCM, et al. Liquid biopsies come of age: towards implementation of circulating tumour DNA. *Nat Rev Cancer*. 2017;17:223-238.
+
+**UMI / duplex consensus (error correction)**
+- Schmitt MW, et al. Detection of ultra-rare mutations by next-generation sequencing. *Proc Natl Acad Sci USA*. 2012;109:14508-14513.
+- Kennedy SR, et al. Detecting ultralow-frequency mutations by Duplex Sequencing. *Nat Protoc*. 2014;9:2586-2606.
+- fgbio. Fulcrum Genomics. https://github.com/fulcrumgenomics/fgbio
+
+**Background / position-specific error model (the empirical null)**
+- Newman AM, et al. An ultrasensitive method for quantitating circulating tumor DNA with broad patient coverage. *Nat Med*. 2014;20:548-554.
+- Newman AM, et al. Integrated digital error suppression for improved detection of circulating tumor DNA. *Nat Biotechnol*. 2016;34:547-555.
+
+**Somatic discovery, copy number, clonality, annotation (Pipeline A)**
+- Benjamin D, et al. Calling Somatic SNVs and Indels with Mutect2. *bioRxiv*. 2019. doi:10.1101/861054.
+- Shen R, Seshan VE. FACETS: allele-specific copy number and clonal heterogeneity analysis tool. *Nucleic Acids Res*. 2016;44:e131.
+- Roth A, et al. PyClone: statistical inference of clonal population structure in cancer. *Nat Methods*. 2014;11:396-398.
+- Gillis S, Roth A. PyClone-VI: scalable inference of clonal population structure using variational inference. *BMC Bioinformatics*. 2020;21:571.
+- McLaren W, et al. The Ensembl Variant Effect Predictor. *Genome Biol*. 2016;17:122.
+- Vasimuddin M, et al. Efficient architecture-aware acceleration of BWA-MEM for multicore systems. *IEEE IPDPS*. 2019:314-324.
+
+**Clonal hematopoiesis (CHIP filtering)**
+- Jaiswal S, et al. Age-related clonal hematopoiesis associated with adverse outcomes. *N Engl J Med*. 2014;371:2488-2498.
+
+**Allele-specific / minor-allele enrichment (the enrichment layer's method class)**
+- Song C, et al. Elimination of unaltered DNA in mixed clinical samples via nuclease-assisted minor-allele enrichment (NaME-PrO). *Nucleic Acids Res*. 2016;44:e146.
+- Li J, et al. Replacing PCR with COLD-PCR enriches variant DNA sequences and redefines the sensitivity of genetic testing. *Nat Med*. 2008;14:579-583.
+
+**Analytical validation (limits of blank/detection/quantitation)**
+- CLSI. Evaluation of Detection Capability for Clinical Laboratory Measurement Procedures. Guideline EP17-A2. Clinical and Laboratory Standards Institute; 2012.
