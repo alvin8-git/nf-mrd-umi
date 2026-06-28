@@ -53,3 +53,39 @@ exercises wiring only (stub touch/echo blocks), so it is independent of VEP cach
 contents. Launch the real run via `bin/run_panel_design.sh` once the VEP cache finishes
 and the box egress frees up (first run also pulls the gatk4/picard/vep/facets/pyclone-vi
 biocontainers pinned in `conf/docker.config`).
+
+## Pipeline A accuracy benchmark vs SEQC2 truth (2026-06-28)
+
+Ran Pipeline A end-to-end on real SEQC2 WES (tumor HCC1395 SRR7890850 / normal
+HCC1395BL SRR7890851, GRCh38) and benchmarked the somatic SNV calls against the
+SEQC2 high-confidence truth set (`high-confidence_sSNV_in_HC_regions_v1.2.1.vcf.gz`).
+
+**Method.** PASS SNVs from FilterMutectCalls, reference-normalized (`bcftools norm
+-m-any -f`), matched to truth by `chrom:pos:ref>alt`. Two evaluation regions:
+- *genome-wide* = SEQC2 HC regions (the truth's native domain).
+- *exome-callable* = HC ∩ tumour depth >=10x, where the WES could physically call.
+  Callable footprint from `mosdepth --quantize 0:10:` on the tumour BAM (89.9 Mb).
+
+| metric | genome-wide (artifact) | exome-callable (fair) |
+|---|---|---|
+| TP | 1103 | 1032 |
+| FP | 334  | 281  |
+| FN | 38344 | 265 |
+| Precision | 0.77 | **0.79** |
+| Recall | 0.028 | **0.80** |
+| **F1** | 0.054 | **0.79** |
+
+The genome-wide F1 (0.054) is an **artifact**: WES covers ~1-2% of the genome but the
+truth is genome-wide, so ~38k truth SNVs are physically uncovered -> false FN. Once
+the truth is restricted to the WES-callable space, recall is 0.80 and **F1 = 0.79**.
+
+**Cross-checks that the run is real, not stubbed:** FACETS purity **0.90** / ploidy
+**3.06** match the known near-pure aneuploid HCC1395 line; 33/50 selected panel sites
+are confirmed truth SNVs.
+
+**Interpretation.** 0.79 is the expected ballpark for a **single-caller, no-PoN,
+no-germline-resource** Mutect2 WES run (all optional and unset here). Published SEQC2
+WES pipelines reach ~0.85-0.95 using a Mutect2 panel-of-normals + gnomAD germline
+resource + multi-caller consensus. The FP=281 (germline/artifact leakage) and FN=265
+(subclonal/low-VAF/filtered) are exactly what those additions address; the knobs are
+already wired in `bin/run_panel_design.sh` (`GERMLINE=`, `PON=`, `INTERVALS=`).
