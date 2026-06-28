@@ -26,6 +26,7 @@ workflow UMI_CONSENSUS {
     fasta
     fasta_dict
     panel_bed
+    bwa_index     // bwa-mem2 index sidecar files
 
     main:
     // B1: FASTQ -> uBAM (UMI -> RX)
@@ -33,7 +34,7 @@ workflow UMI_CONSENSUS {
 
     // B2: raw align (disposable; used only to assign UMI groups by coordinate)
     SAMTOOLS_FASTQ_RAW(FGBIO_FASTQTOBAM.out.bam)
-    BWAMEM2_RAW(SAMTOOLS_FASTQ_RAW.out.reads, fasta)
+    BWAMEM2_RAW(SAMTOOLS_FASTQ_RAW.out.reads, fasta, bwa_index)
     ch_zip_raw = BWAMEM2_RAW.out.sam.join(FGBIO_FASTQTOBAM.out.bam)   // [meta, sam, ubam]
     ZIPPER_RAW(ch_zip_raw, fasta)
 
@@ -44,7 +45,7 @@ workflow UMI_CONSENSUS {
     // B4: filter -> realign consensus -> sort
     FGBIO_FILTERCONSENSUSREADS(FGBIO_CALLDUPLEXCONSENSUS.out.bam, fasta)
     SAMTOOLS_FASTQ_CONS(FGBIO_FILTERCONSENSUSREADS.out.bam)
-    BWAMEM2_CONS(SAMTOOLS_FASTQ_CONS.out.reads, fasta)
+    BWAMEM2_CONS(SAMTOOLS_FASTQ_CONS.out.reads, fasta, bwa_index)
     ch_zip_cons = BWAMEM2_CONS.out.sam.join(FGBIO_FILTERCONSENSUSREADS.out.bam)
     ZIPPER_CONS(ch_zip_cons, fasta)
     SAMTOOLS_SORT(ZIPPER_CONS.out.bam)

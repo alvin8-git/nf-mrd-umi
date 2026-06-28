@@ -8,7 +8,8 @@ process BWAMEM2_MEM {
 
     input:
     tuple val(meta), path(reads)
-    path  fasta            // reference FASTA (bwa-mem2 index files alongside it)
+    path  fasta            // reference FASTA
+    path  index            // bwa-mem2 index sidecars (*.0123,*.amb,*.ann,*.bwt.2bit.64,*.pac), staged alongside fasta
 
     output:
     tuple val(meta), path("*.sam"), emit: sam

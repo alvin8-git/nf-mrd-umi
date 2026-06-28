@@ -36,6 +36,7 @@ jobs:
           mkdir -p ci/ref ci/cache/homo_sapiens
           # stub blocks only touch outputs, so empty placeholder inputs suffice
           touch ci/ref/genome.fa ci/ref/genome.fa.fai ci/ref/genome.dict
+          touch ci/ref/genome.fa.0123 ci/ref/genome.fa.amb ci/ref/genome.fa.ann ci/ref/genome.fa.bwt.2bit.64 ci/ref/genome.fa.pac
           touch ci/ref/snps.vcf.gz ci/ref/snps.vcf.gz.tbi
           touch ci/ref/panel.vcf ci/ref/panel.bed ci/ref/background.tsv
           printf 'DNMT3A\nTET2\n' > ci/ref/chip.txt

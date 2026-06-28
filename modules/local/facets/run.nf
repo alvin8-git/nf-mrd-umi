@@ -8,6 +8,7 @@ process FACETS {
     input:
     tuple val(meta), path(tbam), path(tbai), path(nbam), path(nbai)
     path snp_vcf            // common SNPs (e.g. dbSNP) for the pileup
+    path snp_tbi            // tabix index for snp_vcf (cnv_facets requires it alongside)
 
     output:
     tuple val(meta), path("*.facets.vcf.gz"), emit: cnv

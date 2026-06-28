@@ -25,13 +25,16 @@ workflow PANEL_DESIGN {
     fai       = file(params.fasta_fai)
     dict      = file(params.fasta_dict)
     snp_vcf   = file(params.snp_vcf)
+    snp_tbi   = file("${params.snp_vcf}.tbi")
     chip_bl   = file(params.chip_blocklist)
     vep_cache = file(params.vep_cache)
+    // bwa-mem2 index sidecars, staged alongside the FASTA in the align step
+    bwa_index = files("${params.fasta}.{0123,amb,ann,bwt.2bit.64,pac}")
     pon       = params.mutect2_pon       ? file(params.mutect2_pon)       : []
     germline  = params.germline_resource ? file(params.germline_resource) : []
     intervals = params.intervals         ? file(params.intervals)         : []
 
-    ALIGN_WES(ch_reads, fasta)
+    ALIGN_WES(ch_reads, fasta, bwa_index)
     bams = ALIGN_WES.out.bam
 
     // pair tumor + normal by patient
@@ -46,10 +49,10 @@ workflow PANEL_DESIGN {
     somatic = GATK4_FILTERMUTECTCALLS.out.vcf            // [meta, vcf, tbi]
 
     // A3: CN + purity/ploidy
-    FACETS(paired, snp_vcf)
+    FACETS(paired, snp_vcf, snp_tbi)
 
     // A5: annotation
-    VEP(somatic, fasta, vep_cache)
+    VEP(somatic, fasta, fai, vep_cache)
 
     // A4: clonality / CCF  (prep is the remaining custom gap - see module TODO)
     ch_prep = somatic.join(FACETS.out.cnv).join(FACETS.out.purity)
@@ -62,7 +65,7 @@ workflow PANEL_DESIGN {
     ch_ne = somatic.map { m, vcf, tbi -> [ m.patient, m, vcf, tbi ] }
         .join(normal_for_ev)
         .map { pt, m, vcf, tbi, nb, ni -> tuple(m, vcf, tbi, nb, ni) }
-    NORMAL_EVIDENCE(ch_ne, fasta)
+    NORMAL_EVIDENCE(ch_ne, fasta, fai)
 
     // A6: personalized panel
     ch_sel = VEP.out.vcf.join(PYCLONEVI.out.ccf).join(NORMAL_EVIDENCE.out.evidence)

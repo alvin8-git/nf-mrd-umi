@@ -9,6 +9,7 @@ process VEP {
     input:
     tuple val(meta), path(vcf), path(tbi)
     path fasta
+    path fai               // fasta .fai, staged so --fasta HGVS lookups need no runtime indexing
     path vep_cache
 
     output:

@@ -8,9 +8,10 @@ workflow ALIGN_WES {
     take:
     ch_reads      // [ meta, [fastq_1, fastq_2] ]
     fasta
+    bwa_index     // bwa-mem2 index sidecar files
 
     main:
-    BWAMEM2_MEM(ch_reads, fasta)
+    BWAMEM2_MEM(ch_reads, fasta, bwa_index)
     SAMTOOLS_SORT(BWAMEM2_MEM.out.sam)
     PICARD_MARKDUPLICATES(SAMTOOLS_SORT.out.bam)
 

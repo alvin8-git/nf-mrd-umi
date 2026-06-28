@@ -10,6 +10,7 @@ process NORMAL_EVIDENCE {
     input:
     tuple val(meta), path(somatic_vcf), path(vcf_tbi), path(buffy_bam), path(buffy_bai)
     path fasta
+    path fai               // fasta .fai (pysam FastaFile needs it for --ref)
 
     output:
     tuple val(meta), path("*.normal_evidence.tsv"), emit: evidence
