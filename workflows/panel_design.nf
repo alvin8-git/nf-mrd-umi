@@ -30,9 +30,11 @@ workflow PANEL_DESIGN {
     vep_cache = file(params.vep_cache)
     // bwa-mem2 index sidecars, staged alongside the FASTA in the align step
     bwa_index = files("${params.fasta}.{0123,amb,ann,bwt.2bit.64,pac}")
-    pon       = params.mutect2_pon       ? file(params.mutect2_pon)       : []
-    germline  = params.germline_resource ? file(params.germline_resource) : []
-    intervals = params.intervals         ? file(params.intervals)         : []
+    pon          = params.mutect2_pon       ? file(params.mutect2_pon)              : []
+    pon_tbi      = params.mutect2_pon       ? file("${params.mutect2_pon}.tbi")     : []
+    germline     = params.germline_resource ? file(params.germline_resource)        : []
+    germline_tbi = params.germline_resource ? file("${params.germline_resource}.tbi") : []
+    intervals    = params.intervals         ? file(params.intervals)                : []
 
     ALIGN_WES(ch_reads, fasta, bwa_index)
     bams = ALIGN_WES.out.bam
@@ -44,7 +46,7 @@ workflow PANEL_DESIGN {
         tuple([ id: pt, patient: pt, normal_sm: nm.sm ], tb, ti, nb, ni) }
 
     // A2: somatic discovery
-    GATK4_MUTECT2(paired, fasta, fai, dict, pon, germline, intervals)
+    GATK4_MUTECT2(paired, fasta, fai, dict, pon, pon_tbi, germline, germline_tbi, intervals)
     GATK4_FILTERMUTECTCALLS(GATK4_MUTECT2.out.vcf, fasta, fai, dict)
     somatic = GATK4_FILTERMUTECTCALLS.out.vcf            // [meta, vcf, tbi]
 

@@ -28,6 +28,9 @@ log "paused ILM2 chain ($(ls results/interrogate/*.tsv 2>/dev/null | wc -l)/48 t
 # launch Pipeline A (real run; first use pulls gatk4/picard/vep/facets/pyclone-vi)
 export SNP_VCF=/data/alvin/ref/GRCh38/1000G_phase1.snps.high_confidence.hg38.vcf.gz
 export VEP_CACHE=/data/alvin/ref/vep_cache
+# best-practice Mutect2 resources (improve precision); used if present
+[[ -f /data/alvin/ref/GRCh38/af-only-gnomad.hg38.vcf.gz ]] && export GERMLINE=/data/alvin/ref/GRCh38/af-only-gnomad.hg38.vcf.gz
+[[ -f /data/alvin/ref/GRCh38/1000g_pon.hg38.vcf.gz ]] && export PON=/data/alvin/ref/GRCh38/1000g_pon.hg38.vcf.gz
 log "launching Pipeline A (panel_design) -> results/panel_design"
 bash bin/run_panel_design.sh; rc=$?
 log "Pipeline A exited rc=$rc"

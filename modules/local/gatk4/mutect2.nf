@@ -11,7 +11,9 @@ process GATK4_MUTECT2 {
     path fai
     path dict
     path pon            // [] if none
+    path pon_tbi        // pon .tbi (GATK needs it alongside); [] if no pon
     path germline       // [] if none (e.g. gnomAD)
+    path germline_tbi   // germline .tbi (GATK needs it alongside); [] if no germline
     path intervals      // [] for whole-exome default
 
     output:
