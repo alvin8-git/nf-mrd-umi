@@ -1,0 +1,43 @@
+# CHIP-associated genes for panel_select gene-level blocklisting (one symbol/line).
+# Secondary filter; the primary CHIP defence is buffy-coat subtraction (NORMAL_EVIDENCE).
+# Sourced from common clonal-haematopoiesis driver lists (Jaiswal/Genovese + clinical panels).
+DNMT3A
+TET2
+ASXL1
+JAK2
+TP53
+SF3B1
+SRSF2
+U2AF1
+PPM1D
+GNB1
+CBL
+KRAS
+NRAS
+JAK3
+GNAS
+IDH1
+IDH2
+KIT
+ATM
+CHEK2
+ZRSR2
+STAG2
+BCOR
+BCORL1
+EZH2
+KDM6A
+PHF6
+RUNX1
+NPM1
+FLT3
+MPL
+CALR
+SETBP1
+ETV6
+GATA2
+WT1
+NF1
+RAD21
+SMC1A
+SMC3

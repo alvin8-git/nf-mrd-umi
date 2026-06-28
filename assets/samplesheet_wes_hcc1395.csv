@@ -1,0 +1,2 @@
+patient,tumor_fastq_1,tumor_fastq_2,normal_fastq_1,normal_fastq_2
+HCC1395,/data/alvin/wes/SRR7890850_1.fastq,/data/alvin/wes/SRR7890850_2.fastq,/data/alvin/wes/SRR7890851_1.fastq,/data/alvin/wes/SRR7890851_2.fastq
