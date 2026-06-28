@@ -45,6 +45,7 @@ nf-mrd-umi/
 +-- README.md / Documentation.md / TODO.md # this / the 101 / status & gaps
 +-- VALIDATION.md / VALIDATION_COVERAGE.md # runbook / component->dataset+results
 +-- VALIDATION_DATASETS.md / CONTAINERS.md # public data / container strategy
++-- RELATED_WORK.md # how this compares to commercial + open-source MRD tools
 +-- main.nf, nextflow.config, conf/ # DSL2 entry + profiles (docker/test/local)
 +-- modules/local/ subworkflows/local/ workflows/ # 20 modules, 3 subworkflows, 2 workflows
 +-- bin/ # the custom engine + glue + drivers
