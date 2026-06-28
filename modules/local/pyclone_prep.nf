@@ -16,8 +16,12 @@ process PYCLONE_PREP {
 
     script:
     """
+    # Pass the tumour sample explicitly. The default (first VCF sample) can be the
+    # NORMAL (Mutect2 orders samples arbitrarily); reading normal depths gives every
+    # somatic SNV ~0 alt reads -> CCF 0 -> empty panel. Tumour SM is \${patient}_T.
     pyclone_prep.py build \\
         --vcf ${somatic_vcf} --facets ${facets_vcf} --purity ${purity} \\
+        --tumor-sample ${meta.id}_T \\
         --out ${meta.id}.pyclone_input.tsv
     echo '"${task.process}": {pyclone_prep: bin}' > versions.yml
     """
